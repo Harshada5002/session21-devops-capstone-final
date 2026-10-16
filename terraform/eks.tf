@@ -83,7 +83,7 @@ resource "aws_eks_node_group" "taskboard" {
   cluster_name    = aws_eks_cluster.taskboard.name
   node_group_name = "taskboard-nodes-${var.environment}"
   node_role_arn   = aws_iam_role.eks_node_group.arn
-  subnet_ids      = aws_subnet.private[*].id   # nodes in private subnets
+  subnet_ids      = aws_subnet.private[*].id # nodes in private subnets
 
   instance_types = [var.node_instance_type]
 
@@ -94,13 +94,13 @@ resource "aws_eks_node_group" "taskboard" {
   }
 
   update_config {
-    max_unavailable = 1  # rolling update: at most 1 node unavailable at a time
+    max_unavailable = 1 # rolling update: at most 1 node unavailable at a time
   }
 
   # Use Amazon Linux 2023 (AL2023) for improved security and performance
-  ami_type       = "AL2023_x86_64_STANDARD"
-  capacity_type  = "ON_DEMAND"
-  disk_size      = 20  # GB – increase if storing large container images
+  ami_type      = "AL2023_x86_64_STANDARD"
+  capacity_type = "ON_DEMAND"
+  disk_size     = 20 # GB – increase if storing large container images
 
   depends_on = [
     aws_iam_role_policy_attachment.worker_node,

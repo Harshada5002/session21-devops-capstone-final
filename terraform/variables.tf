@@ -63,11 +63,9 @@ variable "cluster_version" {
 }
 
 variable "node_instance_type" {
-  description = "EC2 instance type for worker nodes"
+  description = "EC2 instance type for EKS nodes"
   type        = string
-  default     = "t3.medium"
-  # t3.medium: 2 vCPU, 4 GB RAM – adequate for the learning environment.
-  # Use t3.small to reduce costs during off-hours.
+  default     = "t3.small"
 }
 
 variable "node_desired_size" {

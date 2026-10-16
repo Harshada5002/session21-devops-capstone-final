@@ -2,7 +2,7 @@
 resource "aws_vpc" "taskboard" {
   cidr_block           = var.vpc_cidr
   enable_dns_support   = true
-  enable_dns_hostnames = true    # required for EKS node-to-control-plane communication
+  enable_dns_hostnames = true # required for EKS node-to-control-plane communication
 
   tags = { Name = "taskboard-vpc-${var.environment}" }
 }
@@ -25,7 +25,7 @@ resource "aws_subnet" "public" {
   map_public_ip_on_launch = true
 
   tags = {
-    Name                                        = "taskboard-public-${count.index + 1}-${var.environment}"
+    Name = "taskboard-public-${count.index + 1}-${var.environment}"
     # These tags allow the AWS Load Balancer Controller to discover subnets.
     "kubernetes.io/cluster/${var.cluster_name}" = "shared"
     "kubernetes.io/role/elb"                    = "1"
@@ -59,7 +59,7 @@ resource "aws_eip" "nat" {
 # Destroy when not in use to avoid ongoing costs.
 resource "aws_nat_gateway" "taskboard" {
   allocation_id = aws_eip.nat.id
-  subnet_id     = aws_subnet.public[0].id   # NAT GW sits in the first public subnet
+  subnet_id     = aws_subnet.public[0].id # NAT GW sits in the first public subnet
   depends_on    = [aws_internet_gateway.taskboard]
   tags          = { Name = "taskboard-nat-${var.environment}" }
 }
