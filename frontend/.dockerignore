@@ -1,0 +1,8 @@
+// frontend/.dockerignore - keep node_modules and build artifacts out
+node_modules/
+dist/
+.env
+.env.*
+*.log
+.vscode/
+.DS_Store

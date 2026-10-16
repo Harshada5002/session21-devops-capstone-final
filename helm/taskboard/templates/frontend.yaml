@@ -1,0 +1,76 @@
+---
+# Frontend Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: taskboard-frontend
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "taskboard.labels" . | nindent 4 }}
+    {{- include "taskboard.selectorLabels" "frontend" | nindent 4 }}
+spec:
+  replicas: {{ .Values.frontend.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "taskboard.selectorLabels" "frontend" | nindent 6 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        {{- include "taskboard.labels" . | nindent 8 }}
+        {{- include "taskboard.selectorLabels" "frontend" | nindent 8 }}
+    spec:
+      serviceAccountName: taskboard-frontend
+      containers:
+        - name: frontend
+          image: "{{ .Values.frontend.image.repository }}:{{ .Values.frontend.image.tag }}"
+          imagePullPolicy: {{ .Values.frontend.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.frontend.resources | nindent 12 }}
+          livenessProbe:
+            {{- toYaml .Values.frontend.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.frontend.readinessProbe | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+      {{- with .Values.frontend.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+# Frontend Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: taskboard-frontend
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "taskboard.labels" . | nindent 4 }}
+    {{- include "taskboard.selectorLabels" "frontend" | nindent 4 }}
+spec:
+  type: {{ .Values.frontend.service.type }}
+  ports:
+    - port: {{ .Values.frontend.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "taskboard.selectorLabels" "frontend" | nindent 4 }}
+---
+# Frontend ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: taskboard-frontend
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "taskboard.labels" . | nindent 4 }}
+automountServiceAccountToken: false

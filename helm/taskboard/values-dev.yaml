@@ -1,0 +1,25 @@
+# values-dev.yaml – development environment overrides
+backend:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "128Mi"
+    limits:
+      cpu: "200m"
+      memory: "256Mi"
+  env:
+    ENVIRONMENT: "development"
+    DEBUG: "true"
+  autoscaling:
+    enabled: false
+
+frontend:
+  replicaCount: 1
+
+ingress:
+  host: "taskboard.dev.local"
+
+postgresql:
+  persistence:
+    size: 2Gi

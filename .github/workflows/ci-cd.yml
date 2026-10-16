@@ -1,0 +1,274 @@
+name: TaskBoard CI/CD
+
+# ── Triggers ──────────────────────────────────────────────────────────────────
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+# ── Minimal permissions (principle of least privilege) ────────────────────────
+permissions:
+  contents: read
+  packages: write          # needed to push to GHCR
+  id-token: write          # needed for OIDC AWS authentication
+  security-events: write   # needed for Trivy SARIF upload
+
+# ── Global environment ────────────────────────────────────────────────────────
+env:
+  REGISTRY: ghcr.io
+  BACKEND_IMAGE:  ghcr.io/${{ github.repository_owner }}/taskboard-backend
+  FRONTEND_IMAGE: ghcr.io/${{ github.repository_owner }}/taskboard-frontend
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION:   "20"
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Stage 1: Test
+# ══════════════════════════════════════════════════════════════════════════════
+jobs:
+  test-backend:
+    name: Backend Tests (Pytest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Pytest with coverage
+        run: pytest -q --cov=app --cov-report=xml --cov-report=term-missing
+        # Tests use an in-memory SQLite database – no PostgreSQL service required.
+
+      - name: Upload coverage report
+        uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          files: backend/coverage.xml
+          fail_ci_if_error: false
+
+  test-frontend:
+    name: Frontend Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build production bundle
+        run: npm run build
+
+      - name: Verify build output
+        run: |
+          test -d dist || (echo "ERROR: dist/ directory not found" && exit 1)
+          test -f dist/index.html || (echo "ERROR: index.html not found" && exit 1)
+          echo "Frontend build successful. Files:"
+          ls -lh dist/
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Stage 2: Build, Scan, Publish
+# ══════════════════════════════════════════════════════════════════════════════
+  build-and-publish:
+    name: Build → Scan → Publish
+    runs-on: ubuntu-latest
+    needs: [test-backend, test-frontend]
+    # Only publish images from the main branch (not PRs from forks)
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    outputs:
+      image-tag: ${{ steps.meta.outputs.short-sha }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Derive image tag
+        id: meta
+        run: |
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          echo "short-sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "Image tag: ${SHORT_SHA}"
+
+      # ── Backend image ───────────────────────────────────────────────────────
+      - name: Build backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: false        # build first, scan before pushing
+          tags: |
+            ${{ env.BACKEND_IMAGE }}:${{ steps.meta.outputs.short-sha }}
+            ${{ env.BACKEND_IMAGE }}:dev
+          cache-from: type=gha
+          cache-to:   type=gha,mode=max
+          load: true
+
+      - name: Trivy scan – backend
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref:     "${{ env.BACKEND_IMAGE }}:${{ steps.meta.outputs.short-sha }}"
+          format:        sarif
+          output:        trivy-backend.sarif
+          severity:      HIGH,CRITICAL
+          exit-code:     1          # fail the pipeline on HIGH/CRITICAL findings
+          ignore-unfixed: true      # ignore vulnerabilities without a fix
+
+      - name: Upload backend Trivy results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-backend.sarif
+          category:   backend-image
+
+      - name: Push backend image (post-scan)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: true
+          tags: |
+            ${{ env.BACKEND_IMAGE }}:${{ steps.meta.outputs.short-sha }}
+            ${{ env.BACKEND_IMAGE }}:dev
+          cache-from: type=gha
+
+      # ── Frontend image ──────────────────────────────────────────────────────
+      - name: Build frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: false
+          tags: |
+            ${{ env.FRONTEND_IMAGE }}:${{ steps.meta.outputs.short-sha }}
+            ${{ env.FRONTEND_IMAGE }}:dev
+          cache-from: type=gha
+          cache-to:   type=gha,mode=max
+          load: true
+
+      - name: Trivy scan – frontend
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref:     "${{ env.FRONTEND_IMAGE }}:${{ steps.meta.outputs.short-sha }}"
+          format:        sarif
+          output:        trivy-frontend.sarif
+          severity:      HIGH,CRITICAL
+          exit-code:     1
+          ignore-unfixed: true
+
+      - name: Upload frontend Trivy results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-frontend.sarif
+          category:   frontend-image
+
+      - name: Push frontend image (post-scan)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: true
+          tags: |
+            ${{ env.FRONTEND_IMAGE }}:${{ steps.meta.outputs.short-sha }}
+            ${{ env.FRONTEND_IMAGE }}:dev
+          cache-from: type=gha
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Stage 3: Deploy to EKS
+# ══════════════════════════════════════════════════════════════════════════════
+  deploy:
+    name: Deploy to EKS
+    runs-on: ubuntu-latest
+    needs: [build-and-publish]
+    # Uses a protected 'production' GitHub environment.
+    # Requires manual approval if configured in repo Settings → Environments.
+    environment: production
+
+    # ── Prerequisites (must be configured before this job will succeed) ───────
+    # 1. AWS_ACCOUNT_ID  – your AWS account number (repo secret)
+    # 2. AWS_REGION      – e.g. ap-south-1 (repo variable or secret)
+    # 3. EKS_CLUSTER_NAME – your cluster name (repo variable or secret)
+    # 4. AWS OIDC trust relationship configured for this repo
+    #
+    # If prerequisites are not met, comment out this job until the cluster
+    # is provisioned (see terraform/ for infrastructure setup).
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume:  arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/TaskBoardGitHubActionsRole
+          aws-region:      ${{ vars.AWS_REGION || 'ap-south-1' }}
+
+      - name: Update kubeconfig for EKS
+        run: |
+          aws eks update-kubeconfig \
+            --region "${{ vars.AWS_REGION || 'ap-south-1' }}" \
+            --name   "${{ vars.EKS_CLUSTER_NAME }}"
+
+      - name: Verify cluster access
+        run: kubectl get nodes
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.3
+
+      - name: Deploy with Helm
+        run: |
+          helm upgrade --install taskboard ./helm/taskboard \
+            --namespace taskboard \
+            --create-namespace \
+            --values ./helm/taskboard/values-prod.yaml \
+            --set backend.image.tag="${{ needs.build-and-publish.outputs.image-tag }}" \
+            --set frontend.image.tag="${{ needs.build-and-publish.outputs.image-tag }}" \
+            --wait \
+            --timeout 5m \
+            --atomic     # rolls back automatically on failure
+
+      - name: Verify rollout
+        run: |
+          kubectl rollout status deployment/taskboard-backend  -n taskboard --timeout=120s
+          kubectl rollout status deployment/taskboard-frontend -n taskboard --timeout=120s
+
+      - name: Post-deployment health check
+        run: |
+          echo "Checking backend health via kubectl port-forward…"
+          kubectl port-forward svc/taskboard-backend 8000:8000 -n taskboard &
+          sleep 5
+          curl -sf http://localhost:8000/health || (echo "Health check failed!" && exit 1)
+          kill %1
+          echo "Deployment verified successfully."

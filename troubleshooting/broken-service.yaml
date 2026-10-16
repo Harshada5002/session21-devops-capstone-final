@@ -1,0 +1,46 @@
+# ── Exercise B: Broken Service Selector ──────────────────────────────────────
+# The Service selector uses "app: taskboard-backend-WRONG" but the Pod
+# label is "app.kubernetes.io/component: backend".
+# No traffic reaches the backend through this Service.
+#
+# Expected symptoms:
+#   curl http://taskboard-broken-service:8000/health → connection refused / timeout
+#   kubectl get endpoints taskboard-broken-service -n taskboard
+#   → Endpoints: <none>
+#
+# Investigation:
+#   kubectl get svc taskboard-broken-service -n taskboard -o yaml   # check selector
+#   kubectl get pods -n taskboard --show-labels                     # check pod labels
+#   kubectl describe endpoints taskboard-broken-service -n taskboard # no endpoints
+#
+# Root cause: selector does not match any pod labels.
+#
+# Fix: Update the selector to match real pod labels:
+#   kubectl patch svc taskboard-broken-service -n taskboard \
+#     --type='json' \
+#     -p='[{"op": "replace", "path": "/spec/selector/app.kubernetes.io~1component", "value": "backend"}]'
+#
+# Verification:
+#   kubectl get endpoints taskboard-broken-service -n taskboard
+#   → Should show backend pod IPs
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: taskboard-broken-service
+  namespace: taskboard
+  labels:
+    exercise: "B"
+    purpose: troubleshooting-exercise
+    # ⚠ This manifest is intentionally broken for educational purposes.
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8000
+      targetPort: 8000
+      protocol: TCP
+      name: http
+  selector:
+    # ⚠ WRONG selector – intentional for Exercise B
+    # The real backend pods have label: app.kubernetes.io/component: backend
+    app: taskboard-backend-WRONG

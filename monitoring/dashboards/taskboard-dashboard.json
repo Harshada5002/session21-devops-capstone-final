@@ -1,0 +1,86 @@
+{
+  "title": "TaskBoard Application Dashboard",
+  "uid": "taskboard-main",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "30s",
+  "tags": ["taskboard", "fastapi"],
+  "panels": [
+    {
+      "id": 1,
+      "title": "HTTP Request Rate (req/s)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "targets": [{
+        "expr": "rate(http_requests_total{namespace=\"taskboard\"}[1m])",
+        "legendFormat": "{{method}} {{handler}} {{status_code}}"
+      }]
+    },
+    {
+      "id": 2,
+      "title": "HTTP Error Rate (%)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "targets": [{
+        "expr": "rate(http_requests_total{namespace=\"taskboard\",status_code=~\"5..\"}[1m]) / rate(http_requests_total{namespace=\"taskboard\"}[1m]) * 100",
+        "legendFormat": "Error Rate %"
+      }]
+    },
+    {
+      "id": 3,
+      "title": "Request Duration P95 (seconds)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "targets": [{
+        "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{namespace=\"taskboard\"}[5m]))",
+        "legendFormat": "p95 duration"
+      }]
+    },
+    {
+      "id": 4,
+      "title": "Backend Pod Count",
+      "type": "stat",
+      "gridPos": {"h": 8, "w": 6, "x": 12, "y": 8},
+      "targets": [{
+        "expr": "count(kube_pod_info{namespace=\"taskboard\",pod=~\"taskboard-backend.*\"})",
+        "legendFormat": "Pods"
+      }]
+    },
+    {
+      "id": 5,
+      "title": "CPU Usage (cores)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 6, "x": 18, "y": 8},
+      "targets": [{
+        "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"taskboard\",container=\"backend\"}[1m]))",
+        "legendFormat": "Backend CPU"
+      }]
+    },
+    {
+      "id": 6,
+      "title": "Memory Usage (MB)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+      "targets": [{
+        "expr": "sum(container_memory_working_set_bytes{namespace=\"taskboard\",container=\"backend\"}) / 1024 / 1024",
+        "legendFormat": "Backend Memory MB"
+      }]
+    },
+    {
+      "id": 7,
+      "title": "HPA Current / Desired Replicas",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+      "targets": [
+        {
+          "expr": "kube_horizontalpodautoscaler_status_current_replicas{namespace=\"taskboard\",horizontalpodautoscaler=\"taskboard-backend\"}",
+          "legendFormat": "Current Replicas"
+        },
+        {
+          "expr": "kube_horizontalpodautoscaler_spec_max_replicas{namespace=\"taskboard\",horizontalpodautoscaler=\"taskboard-backend\"}",
+          "legendFormat": "Max Replicas"
+        }
+      ]
+    }
+  ]
+}

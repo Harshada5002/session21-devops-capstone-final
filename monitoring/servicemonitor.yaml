@@ -1,0 +1,30 @@
+---
+# ServiceMonitor – tells Prometheus to scrape the TaskBoard backend
+# Apply this AFTER installing the Prometheus Operator:
+#   kubectl apply -f monitoring/servicemonitor.yaml
+#
+# Verify the target is discovered:
+#   kubectl port-forward svc/prometheus-kube-prometheus-prometheus 9090:9090 -n monitoring
+#   Open http://localhost:9090/targets → look for taskboard-backend
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: taskboard-backend
+  namespace: taskboard
+  labels:
+    app.kubernetes.io/name: taskboard
+    app.kubernetes.io/component: backend
+    # This label is required for the Prometheus Operator to discover this ServiceMonitor
+    release: prometheus
+spec:
+  namespaceSelector:
+    matchNames:
+      - taskboard
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: backend
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+      scrapeTimeout: 10s

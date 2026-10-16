@@ -1,0 +1,104 @@
+{{- if .Values.postgresql.enabled }}
+---
+# PostgreSQL StatefulSet
+# NOTE: This is a learning-oriented in-cluster PostgreSQL setup.
+# For production, use Amazon RDS PostgreSQL with Multi-AZ, automated
+# backups, and encryption at rest. See the README for migration guidance.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: taskboard-postgresql
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "taskboard.labels" . | nindent 4 }}
+    {{- include "taskboard.selectorLabels" "postgresql" | nindent 4 }}
+spec:
+  serviceName: taskboard-postgresql
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "taskboard.selectorLabels" "postgresql" | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "taskboard.labels" . | nindent 8 }}
+        {{- include "taskboard.selectorLabels" "postgresql" | nindent 8 }}
+    spec:
+      containers:
+        - name: postgresql
+          image: "{{ .Values.postgresql.image.repository }}:{{ .Values.postgresql.image.tag }}"
+          imagePullPolicy: {{ .Values.postgresql.image.pullPolicy }}
+          ports:
+            - name: postgresql
+              containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgresql.existingSecret }}
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgresql.existingSecret }}
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgresql.existingSecret }}
+                  key: POSTGRES_DB
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          resources:
+            {{- toYaml .Values.postgresql.resources | nindent 12 }}
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - exec pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" -h localhost
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 6
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - exec pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" -h localhost
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          volumeMounts:
+            - name: postgresql-data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: postgresql-data
+      spec:
+        accessModes: [{{ .Values.postgresql.persistence.accessMode | quote }}]
+        {{- if .Values.postgresql.persistence.storageClass }}
+        storageClassName: {{ .Values.postgresql.persistence.storageClass }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.postgresql.persistence.size }}
+---
+# PostgreSQL Service (headless for StatefulSet DNS)
+apiVersion: v1
+kind: Service
+metadata:
+  name: taskboard-postgresql
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "taskboard.labels" . | nindent 4 }}
+    {{- include "taskboard.selectorLabels" "postgresql" | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.postgresql.service.port }}
+      targetPort: postgresql
+      protocol: TCP
+      name: postgresql
+  selector:
+    {{- include "taskboard.selectorLabels" "postgresql" | nindent 4 }}
+{{- end }}

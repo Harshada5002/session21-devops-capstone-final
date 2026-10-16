@@ -1,0 +1,55 @@
+# prometheus-values.yaml
+# Helm values for kube-prometheus-stack
+# Install with:
+#   helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+#   helm repo update
+#   helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
+#     --namespace monitoring --create-namespace \
+#     --values monitoring/prometheus-values.yaml
+
+prometheus:
+  prometheusSpec:
+    # Scrape targets defined by ServiceMonitor CRDs in any namespace
+    serviceMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorSelector: {}
+    serviceMonitorNamespaceSelector: {}
+    # Retention
+    retention: 7d
+    retentionSize: "5GB"
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+
+# ── TaskBoard ServiceMonitor ──────────────────────────────────────────────────
+# Apply separately after installing the chart:
+#   kubectl apply -f monitoring/servicemonitor.yaml
+additionalServiceMonitors:
+  - name: taskboard-backend
+    namespaceSelector:
+      matchNames: [taskboard]
+    selector:
+      matchLabels:
+        app.kubernetes.io/component: backend
+    endpoints:
+      - port: http
+        path: /metrics
+        interval: 15s
+        scrapeTimeout: 10s
+
+alertmanager:
+  enabled: false   # enable and configure for production alerts
+
+grafana:
+  enabled: true
+  adminPassword: "admin"   # ⚠ CHANGE before deploying. Never commit real passwords.
+  persistence:
+    enabled: true
+    size: 2Gi
+  sidecar:
+    dashboards:
+      enabled: true
+      searchNamespace: ALL

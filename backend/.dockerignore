@@ -1,0 +1,46 @@
+# Backend .dockerignore
+# Prevents sensitive and unnecessary files from entering the build context.
+
+# Environment and secrets
+.env
+.env.*
+*.key
+*.pem
+secrets/
+
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Version control
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Alembic – do NOT exclude the alembic/ directory (it is needed)
+# alembic/
+
+# Docs
+*.md
+docs/

@@ -1,0 +1,66 @@
+{{- if .Values.ingress.enabled }}
+---
+# Ingress
+# Routes / → frontend, /api → backend
+#
+# IMPORTANT: Creating this Ingress object does NOT automatically make
+# the application publicly accessible. You must first install an
+# Ingress Controller in your cluster:
+#
+#   helm upgrade --install ingress-nginx ingress-nginx \
+#     --repo https://kubernetes.github.io/ingress-nginx \
+#     --namespace ingress-nginx --create-namespace
+#
+# Then wait for the LoadBalancer IP/hostname to be assigned:
+#   kubectl get svc -n ingress-nginx ingress-nginx-controller
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: taskboard
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "taskboard.labels" . | nindent 4 }}
+  annotations:
+    {{- toYaml .Values.ingress.annotations | nindent 4 }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- if .Values.ingress.tls }}
+  tls:
+    {{- toYaml .Values.ingress.tls | nindent 4 }}
+  {{- end }}
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          # API routes → FastAPI backend
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: taskboard-backend
+                port:
+                  name: http
+          # Health endpoints → FastAPI backend (for external monitoring)
+          - path: /health
+            pathType: Exact
+            backend:
+              service:
+                name: taskboard-backend
+                port:
+                  name: http
+          - path: /ready
+            pathType: Exact
+            backend:
+              service:
+                name: taskboard-backend
+                port:
+                  name: http
+          # All other requests → React frontend (SPA)
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: taskboard-frontend
+                port:
+                  name: http
+{{- end }}

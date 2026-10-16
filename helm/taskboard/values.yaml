@@ -1,0 +1,178 @@
+# ── helm/taskboard/values.yaml ────────────────────────────────────────────────
+# Default values – override with values-dev.yaml or values-prod.yaml.
+# Do NOT put real secrets here.  Use Kubernetes Secrets or an external
+# secret manager (e.g. AWS Secrets Manager, Vault).
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Global ────────────────────────────────────────────────────────────────────
+global:
+  imageRegistry: ghcr.io
+  imagePullSecrets: []
+
+# ── Backend ───────────────────────────────────────────────────────────────────
+backend:
+  image:
+    repository: ghcr.io/your-org/taskboard-backend
+    tag: "latest"
+    pullPolicy: IfNotPresent
+
+  replicaCount: 2
+
+  service:
+    type: ClusterIP
+    port: 8000
+
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+  env:
+    ENVIRONMENT: "production"
+    DEBUG: "false"
+    CORS_ORIGINS: "http://taskboard.example.com"
+
+  # Database URL is injected from a Secret (see templates/secret.yaml)
+  existingSecret: "taskboard-db-secret"
+
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 8000
+    initialDelaySeconds: 15
+    periodSeconds: 20
+    failureThreshold: 3
+
+  readinessProbe:
+    httpGet:
+      path: /ready
+      port: 8000
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    failureThreshold: 3
+
+  startupProbe:
+    httpGet:
+      path: /health
+      port: 8000
+    failureThreshold: 30
+    periodSeconds: 5
+
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false
+    capabilities:
+      drop: [ALL]
+
+  podAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port:   "8000"
+    prometheus.io/path:   "/metrics"
+
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# ── Frontend ──────────────────────────────────────────────────────────────────
+frontend:
+  image:
+    repository: ghcr.io/your-org/taskboard-frontend
+    tag: "latest"
+    pullPolicy: IfNotPresent
+
+  replicaCount: 2
+
+  service:
+    type: ClusterIP
+    port: 80
+
+  resources:
+    requests:
+      cpu: "50m"
+      memory: "64Mi"
+    limits:
+      cpu: "200m"
+      memory: "128Mi"
+
+  livenessProbe:
+    httpGet:
+      path: /nginx-health
+      port: 80
+    initialDelaySeconds: 10
+    periodSeconds: 30
+
+  readinessProbe:
+    httpGet:
+      path: /nginx-health
+      port: 80
+    initialDelaySeconds: 5
+    periodSeconds: 10
+
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# ── PostgreSQL ────────────────────────────────────────────────────────────────
+# For production, replace with Amazon RDS PostgreSQL connection details
+# stored in a Kubernetes Secret.
+postgresql:
+  enabled: true       # set to false when using RDS
+  image:
+    repository: postgres
+    tag: "16-alpine"
+    pullPolicy: IfNotPresent
+
+  service:
+    port: 5432
+
+  persistence:
+    enabled: true
+    storageClass: ""     # "" = cluster default (gp2 on EKS)
+    size: 10Gi
+    accessMode: ReadWriteOnce
+
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+  # Credentials are read from the Secret referenced by existingSecret
+  existingSecret: "taskboard-db-secret"
+
+# ── Ingress ───────────────────────────────────────────────────────────────────
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+  host: "taskboard.example.com"    # override in values-prod.yaml
+  tls: []
+  # tls:
+  #   - secretName: taskboard-tls
+  #     hosts:
+  #       - taskboard.example.com
+
+# ── Namespace ─────────────────────────────────────────────────────────────────
+namespace: taskboard
+
+# ── Migration Job ─────────────────────────────────────────────────────────────
+migration:
+  enabled: true
+  image:
+    repository: ghcr.io/your-org/taskboard-backend
+    tag: "latest"

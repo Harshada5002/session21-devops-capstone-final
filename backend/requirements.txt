@@ -1,0 +1,31 @@
+# ──────────────────────────────────────────────
+# TaskBoard Backend – pinned dependencies
+# Verified working on Python 3.12 / 3.14
+# ──────────────────────────────────────────────
+
+# Web framework
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+
+# Database
+sqlalchemy==2.0.36
+alembic==1.14.0
+psycopg[binary]==3.2.13
+
+# Validation – 2.14.x has prebuilt wheels for Python 3.14
+pydantic==2.14.1
+pydantic-settings==2.7.1
+email-validator==2.2.0
+
+# Monitoring
+prometheus-fastapi-instrumentator==7.0.0
+
+# Testing
+pytest==8.3.4
+pytest-asyncio==0.24.0
+httpx==0.28.1
+pytest-cov==6.0.0
+
+# Utilities
+python-dateutil==2.9.0.post0
+python-multipart==0.0.18

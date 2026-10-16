@@ -1,0 +1,67 @@
+# grafana-values.yaml
+# Grafana configuration for TaskBoard monitoring
+# Deployed as part of kube-prometheus-stack
+#
+# Access Grafana:
+#   kubectl port-forward svc/prometheus-grafana 3001:80 -n monitoring
+#   Open http://localhost:3001
+#   Username: admin
+#   Password: see adminPassword below (CHANGE IN PRODUCTION)
+
+grafana:
+  enabled: true
+
+  # ⚠ Change this password before deploying to a shared/production environment.
+  # Never commit real credentials to Git.
+  adminUser: admin
+  adminPassword: "TaskBoard@2024"
+
+  persistence:
+    enabled: true
+    size: 2Gi
+
+  # Auto-provision the TaskBoard dashboard from the dashboards/ directory
+  sidecar:
+    dashboards:
+      enabled: true
+      searchNamespace: ALL
+      label: grafana_dashboard
+    datasources:
+      enabled: true
+
+  # Default data source: Prometheus
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources:
+        - name: Prometheus
+          type: prometheus
+          url: http://prometheus-kube-prometheus-prometheus:9090
+          isDefault: true
+          access: proxy
+
+  # Pre-provision the TaskBoard dashboard
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: taskboard
+          orgId: 1
+          folder: TaskBoard
+          type: file
+          disableDeletion: false
+          options:
+            path: /var/lib/grafana/dashboards/taskboard
+
+  dashboards:
+    taskboard:
+      taskboard-main:
+        file: dashboards/taskboard-dashboard.json
+
+  grafana.ini:
+    server:
+      root_url: "%(protocol)s://%(domain)s:%(http_port)s/grafana/"
+    auth.anonymous:
+      enabled: false
+    security:
+      allow_embedding: true

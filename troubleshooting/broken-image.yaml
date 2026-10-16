@@ -1,0 +1,57 @@
+# ── Exercise A: Broken Image ──────────────────────────────────────────────────
+# This manifest references a deliberately nonexistent image tag.
+# Students should observe ImagePullBackOff and fix it.
+#
+# Expected symptoms:
+#   kubectl get pods -n taskboard
+#   → Pod status: ImagePullBackOff or ErrImagePull
+#
+# Investigation commands:
+#   kubectl describe pod <pod-name> -n taskboard
+#   kubectl get events -n taskboard --sort-by=.lastTimestamp
+#
+# Root cause: image tag "v99.99.99-does-not-exist" does not exist in the registry.
+#
+# Fix: Change image tag to a valid one, e.g. "dev"
+#   kubectl set image deployment/taskboard-broken-image \
+#     broken=ghcr.io/your-org/taskboard-backend:dev \
+#     -n taskboard
+#
+# Verification:
+#   kubectl get pods -n taskboard -l app=taskboard-broken-image
+#   → All pods should reach Running state
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: taskboard-broken-image
+  namespace: taskboard
+  labels:
+    app: taskboard-broken-image
+    exercise: "A"
+    # ⚠ This manifest is intentionally broken for educational purposes.
+    # Do NOT apply to production.
+    purpose: troubleshooting-exercise
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: taskboard-broken-image
+  template:
+    metadata:
+      labels:
+        app: taskboard-broken-image
+    spec:
+      containers:
+        - name: broken
+          # ⚠ This image tag DOES NOT EXIST – intentional for the exercise
+          image: ghcr.io/your-org/taskboard-backend:v99.99.99-does-not-exist
+          ports:
+            - containerPort: 8000
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "100m"
+              memory: "128Mi"

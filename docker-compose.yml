@@ -1,0 +1,119 @@
+# ── TaskBoard – Docker Compose ────────────────────────────────────────────────
+# Local development stack: frontend + backend + PostgreSQL
+#
+# Start:    docker compose up --build
+# Stop:     docker compose down
+# Logs:     docker compose logs -f
+# Reset DB: docker compose down -v   (⚠ DELETES the database volume and all data)
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    container_name: taskboard-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER:     ${POSTGRES_USER:-taskboard}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-taskboard}
+      POSTGRES_DB:       ${POSTGRES_DB:-taskboard}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"        # exposed so you can connect from a local DB client
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-taskboard} -d ${POSTGRES_DB:-taskboard}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - taskboard-net
+
+  # ── Database migration job ──────────────────────────────────────────────────
+  # Runs Alembic migrations once and exits.
+  # The backend depends on this completing successfully.
+  migrate:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: taskboard-migrate
+    command: >
+      sh -c "
+        echo 'Waiting for database…' &&
+        until pg_isready -h db -p 5432 -U ${POSTGRES_USER:-taskboard}; do
+          sleep 1;
+        done &&
+        echo 'Running Alembic migrations…' &&
+        alembic upgrade head &&
+        echo 'Migrations complete.'
+      "
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-taskboard}:${POSTGRES_PASSWORD:-taskboard}@db:5432/${POSTGRES_DB:-taskboard}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - taskboard-net
+    restart: "no"     # migration job must not restart on success
+
+  # ── FastAPI backend ─────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: taskboard-backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-taskboard}:${POSTGRES_PASSWORD:-taskboard}@db:5432/${POSTGRES_DB:-taskboard}
+      ENVIRONMENT: development
+      CORS_ORIGINS: "http://localhost:3000,http://frontend:80"
+      DEBUG: "false"
+    ports:
+      - "8000:8000"   # backend docs available at http://localhost:8000/docs
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - taskboard-net
+
+  # ── React frontend (Nginx) ──────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: taskboard-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"     # application available at http://localhost:3000
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:80/nginx-health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - taskboard-net
+
+# ── Named volumes ─────────────────────────────────────────────────────────────
+volumes:
+  postgres_data:
+    name: taskboard_postgres_data
+    # ⚠ WARNING: `docker compose down -v` deletes this volume and ALL task data.
+
+# ── Networks ──────────────────────────────────────────────────────────────────
+networks:
+  taskboard-net:
+    name: taskboard-network
+    driver: bridge

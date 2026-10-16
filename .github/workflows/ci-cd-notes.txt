@@ -1,0 +1,14 @@
+"""
+GitHub Actions CI/CD Pipeline
+==============================
+Stage 1 – Test:   Python tests + Node.js build
+Stage 2 – Build:  Docker images, Trivy scan, GHCR publish
+Stage 3 – Deploy: Helm upgrade to EKS (requires configured cluster)
+
+Security notes:
+- Uses OIDC for AWS auth (no long-lived keys) when configured.
+- Uses GITHUB_TOKEN with minimal permissions for GHCR.
+- Pinned action versions for supply-chain security.
+- Deploy job requires a protected 'production' environment.
+"""
+# This is generated as a reference – see .github/workflows/ci-cd.yml
