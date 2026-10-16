@@ -68,7 +68,7 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-taskboard}:${POSTGRES_PASSWORD:-taskboard}@db:5432/${POSTGRES_DB:-taskboard}
       ENVIRONMENT: development
-      CORS_ORIGINS: "http://localhost:3000,http://frontend:80"
+      CORS_ORIGINS: '["http://localhost:3000","http://frontend:80"]'
       DEBUG: "false"
     ports:
       - "8000:8000"   # backend docs available at http://localhost:8000/docs
